@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>에이티즈 곡 취향 소트</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- html2canvas -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <!-- React & ReactDOM (UMD) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel Standalone (for JSX/TSX support in browser) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: #000000;
+        color: #ffffff;
+      }
+      /* Custom utility for cursor pointer in button component */
+      .cursor-pointer {
+        cursor: pointer;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-presets="react,typescript">
+      const { useState, useEffect, useCallback, useRef } = React;
+
+      // ----------------------------------------------------------------------
+      // 1. Types (Interfaces are for TS checking in IDE, Babel ignores them at runtime)
+      // ----------------------------------------------------------------------
+      interface Song {
+        id: number;
+        title: string;
+      }
+
+      type SortMode = 'ALL' | 'KOR_ONLY';
+
+      interface SorterState {
+        round: number;
+        totalRoundsEstimate: number;
+        progress: number;
+      }
+
+      interface HistoryItem {
+        queue: Song[][];
+        currentLeft: Song[];
+        currentRight: Song[];
+        leftIndex: number;
+        rightIndex: number;
+        tempMerged: Song[];
+        mergedCount: number;
+      }
+
+      // ----------------------------------------------------------------------
+      // 2. Data
+      // ----------------------------------------------------------------------
+      const RAW_DATA = `
+해적왕
+Treasure
+Stay
+My Way
+HALA HALA (Hearts Awakened, Live Alive)
+Say My Name
+Desire
+Light
+Promise
+From (2018)
+Utopia
+ILLUSION
+WAVE
+Aurora
+Dancing Like Butterfly Wings
+WONDERLAND
+Win
+If Without You
+친구 (THANK U)
+Mist
+Sunrise
+걸어가고 있어
+Answer
+지평선 (Horizon)
+Star 1117
+Precious
+FEVER
+THANXX
+춤을 춰 (TO THE BEAT)
+INCEPTION
+One Day At A Time
+불놀이야 (I'm The One)
+선도부 (The Leaders)
+Time Of Love
+Take Me Home
+Celebrate
+Eternal Sunshine
+Feeling Like I Do
+Deja Vu
+ROCKY
+All About You
+밤하늘 (Not Too Late)
+야간비행 (Turbulence)
+Be With You
+The Letter
+Still Here
+Better
+멋 (The Real) (흥 ver.)
+WAVE (Overture)
+WONDERLAND (킹덤 ver.)
+Propaganda
+Sector 1
+Cyberpunk
+Guerrilla
+WDIG (Where Do I Go)
+New World
+HALAZIA
+This World
+Dune
+BOUNCY (K-HOT CHILLI PEPPERS)
+DJANGO
+최면 (Wake Up)
+Outlaw
+WE KNOW
+Emergency
+미친 폼 (Crazy Form)
+ARRIBA
+Silver Light
+꿈날 (Dreamy Day)
+MATZ (홍중, 성화)
+IT's You (여상, 산, 우영)
+Youth (윤호, 민기)
+Everything (종호)
+Golden Hour
+Blind
+WORK
+Empty Box
+Shaboom
+Siren
+DEEP DIVE
+Ice On My Teeth
+Man on Fire
+Selfish Waltz
+Enough
+Lemon Drop
+Masterpiece
+Now this house ain't a home
+Castle
+In Your Fantasy
+NO1 (홍중)
+Skin (성화)
+Slide to me (윤호)
+Legacy (여상)
+Creep (산)
+ROAR (민기)
+Sagittarius (우영)
+우리의 마음이 닿는 곳이라면 (To be your light) (종호)
+Dreamers
+Blue Summer
+The King
+Paradigm
+Limitless
+DIAMOND
+NOT OKAY
+Days
+Birthday
+Royal
+Forevermore
+Ash
+12 Midnight
+Tippy Toes
+FACE
+Crescendo
+`;
+
+      const parseSongs = (text) => {
+        return text
+          .trim()
+          .split('\n')
+          .map((line, index) => ({ id: index, title: line.trim() }))
+          .filter((s) => s.title.length > 0);
+      };
+
+      const SONGS_ALL = parseSongs(RAW_DATA);
+
+      const JAPANESE_TITLES = new Set([
+        'Better',
+        'Still Here',
+        'Dreamers',
+        'Blue Summer',
+        'The King',
+        'Paradigm',
+        'Limitless',
+        'DIAMOND',
+        'NOT OKAY',
+        'Days',
+        'Birthday',
+        'Royal',
+        'Forevermore',
+        'Ash',
+        '12 Midnight',
+        'Tippy Toes',
+        'FACE',
+        'Crescendo'
+      ]);
+
+      const SONGS_FILTERED = SONGS_ALL.filter(
+        (song) => !JAPANESE_TITLES.has(song.title)
+      );
+
+      // ----------------------------------------------------------------------
+      // 3. Components: Button
+      // ----------------------------------------------------------------------
+      const Button = ({
+        onClick,
+        children,
+        variant = 'primary',
+        className = '',
+        disabled = false,
+      }) => {
+        const baseStyles = "cursor-pointer px-6 py-3 rounded-none font-bold transition-all duration-200 border text-sm tracking-wide disabled:opacity-50 disabled:pointer-events-none";
+        
+        const variants = {
+          primary: "bg-black text-white border-white hover:bg-white hover:text-black",
+          secondary: "bg-zinc-900 text-zinc-300 border-zinc-700 hover:border-zinc-500 hover:text-white",
+          accent: "bg-white text-black border-white hover:bg-zinc-200",
+          ghost: "bg-transparent text-zinc-500 hover:text-white border-transparent py-2 px-3",
+        };
+
+        return (
+          <button
+            onClick={onClick}
+            disabled={disabled}
+            className={`${baseStyles} ${variants[variant]} ${className}`}
+          >
+            {children}
+          </button>
+        );
+      };
+
+      // ----------------------------------------------------------------------
+      // 4. Components: ProgressBar
+      // ----------------------------------------------------------------------
+      const ProgressBar = ({ progress }) => {
+        return (
+          <div className="w-full max-w-md mx-auto mt-8 mb-2">
+            <div className="flex justify-between text-xs text-zinc-500 mb-2 uppercase tracking-wider font-semibold">
+              <span>진행 상황</span>
+              <span>{Math.round(progress)}%</span>
+            </div>
+            <div className="w-full bg-zinc-900 h-1 overflow-hidden">
+              <div
+                className="bg-white h-full transition-all duration-500 ease-out"
+                style={{ width: `${progress}%` }}
+              ></div>
+            </div>
+          </div>
+        );
+      };
+
+      // ----------------------------------------------------------------------
+      // 5. Service: useMergeSort Hook
+      // ----------------------------------------------------------------------
+      const useMergeSort = (initialSongs) => {
+        const [queue, setQueue] = useState([]);
+        const [currentLeft, setCurrentLeft] = useState([]);
+        const [currentRight, setCurrentRight] = useState([]);
+        const [leftIndex, setLeftIndex] = useState(0);
+        const [rightIndex, setRightIndex] = useState(0);
+        const [tempMerged, setTempMerged] = useState([]);
+        const [sortedResult, setSortedResult] = useState(null);
+        const [history, setHistory] = useState([]);
+        
+        // Progress estimation
+        const [totalMaxMergeSteps, setTotalMaxMergeSteps] = useState(1);
+        const [mergedCount, setMergedCount] = useState(0);
+
+        // Initialize sort
+        const startSort = useCallback((songs) => {
+          const shuffled = [...songs].sort(() => Math.random() - 0.5);
+          const initQueue = shuffled.map(s => [s]);
+          
+          setQueue(initQueue);
+          setCurrentLeft([]);
+          setCurrentRight([]);
+          setTempMerged([]);
+          setSortedResult(null);
+          setHistory([]);
+          setLeftIndex(0);
+          setRightIndex(0);
+          setMergedCount(0);
+          
+          const n = songs.length;
+          const depth = Math.ceil(Math.log2(n));
+          setTotalMaxMergeSteps(Math.max(1, n * depth));
+        }, []);
+
+        // Reset sort state
+        const reset = useCallback(() => {
+          setQueue([]);
+          setCurrentLeft([]);
+          setCurrentRight([]);
+          setLeftIndex(0);
+          setRightIndex(0);
+          setTempMerged([]);
+          setSortedResult(null);
+          setHistory([]);
+          setMergedCount(0);
+          setTotalMaxMergeSteps(1);
+        }, []);
+
+        const processQueue = useCallback(() => {
+          if (sortedResult) return;
+
+          if (currentLeft.length > 0 && currentRight.length > 0) {
+            return;
+          }
+
+          if (queue.length >= 2) {
+            const newQueue = [...queue];
+            const left = newQueue.shift();
+            const right = newQueue.shift();
+            
+            setQueue(newQueue);
+            setCurrentLeft(left);
+            setCurrentRight(right);
+            setLeftIndex(0);
+            setRightIndex(0);
+            setTempMerged([]);
+          } else if (queue.length === 1) {
+            setSortedResult(queue[0]);
+          }
+        }, [queue, currentLeft, currentRight, sortedResult]);
+
+        useEffect(() => {
+          processQueue();
+        }, [queue, currentLeft, currentRight, tempMerged.length, sortedResult, processQueue]);
+
+        const saveHistory = () => {
+          setHistory(prev => [
+            ...prev,
+            {
+              queue: [...queue],
+              currentLeft: [...currentLeft],
+              currentRight: [...currentRight],
+              leftIndex,
+              rightIndex,
+              tempMerged: [...tempMerged],
+              mergedCount: mergedCount
+            }
+          ]);
+        };
+
+        const handleUndo = () => {
+          if (history.length === 0) return;
+          const lastState = history[history.length - 1];
+          
+          setQueue(lastState.queue);
+          setCurrentLeft(lastState.currentLeft);
+          setCurrentRight(lastState.currentRight);
+          setLeftIndex(lastState.leftIndex);
+          setRightIndex(lastState.rightIndex);
+          setTempMerged(lastState.tempMerged);
+          setMergedCount(lastState.mergedCount);
+          
+          setHistory(prev => prev.slice(0, -1));
+        };
+
+        const handleVote = (winner) => {
+          saveHistory();
+
+          const leftSong = currentLeft[leftIndex];
+          const rightSong = currentRight[rightIndex];
+
+          if (winner === 'left') {
+            setTempMerged(prev => [...prev, leftSong]);
+            setLeftIndex(prev => prev + 1);
+            setMergedCount(prev => prev + 1);
+          } else if (winner === 'right') {
+            setTempMerged(prev => [...prev, rightSong]);
+            setRightIndex(prev => prev + 1);
+            setMergedCount(prev => prev + 1);
+          } else {
+            setTempMerged(prev => [...prev, leftSong, rightSong]);
+            setLeftIndex(prev => prev + 1);
+            setRightIndex(prev => prev + 1);
+            setMergedCount(prev => prev + 2);
+          }
+        };
+
+        useEffect(() => {
+          if (currentLeft.length === 0 && currentRight.length === 0) return;
+
+          const leftDone = leftIndex >= currentLeft.length;
+          const rightDone = rightIndex >= currentRight.length;
+
+          if (leftDone || rightDone) {
+              const remainingLeft = currentLeft.slice(leftIndex);
+              const remainingRight = currentRight.slice(rightIndex);
+              
+              const autoMergedCount = remainingLeft.length + remainingRight.length;
+              setMergedCount(prev => prev + autoMergedCount);
+
+              const finalMerged = [...tempMerged, ...remainingLeft, ...remainingRight];
+              
+              setQueue(prev => [...prev, finalMerged]);
+              
+              setCurrentLeft([]);
+              setCurrentRight([]);
+              setTempMerged([]);
+              setLeftIndex(0);
+              setRightIndex(0);
+          }
+        }, [leftIndex, rightIndex, currentLeft, currentRight, tempMerged]);
+
+        const isLeftValid = leftIndex < currentLeft.length;
+        const isRightValid = rightIndex < currentRight.length;
+
+        const currentPair = (currentLeft.length > 0 && currentRight.length > 0 && isLeftValid && isRightValid) 
+          ? { left: currentLeft[leftIndex], right: currentRight[rightIndex] }
+          : null;
+
+        const progressValue = sortedResult 
+          ? 100 
+          : Math.min(100, Math.round((mergedCount / totalMaxMergeSteps) * 100));
+
+        return {
+          sortedResult,
+          currentPair,
+          progress: progressValue,
+          startSort,
+          handleVote,
+          handleUndo,
+          canUndo: history.length > 0,
+          reset
+        };
+      };
+
+      // ----------------------------------------------------------------------
+      // 6. Main App Component
+      // ----------------------------------------------------------------------
+      const App = () => {
+        const [mode, setMode] = useState('setup');
+        const [selectedDataset, setSelectedDataset] = useState([]);
+        const { 
+          startSort, 
+          sortedResult, 
+          currentPair, 
+          handleVote, 
+          handleUndo, 
+          canUndo, 
+          progress
+        } = useMergeSort(selectedDataset);
+
+        const resultRef = useRef(null);
+
+        useEffect(() => {
+          if (sortedResult) {
+            setMode('result');
+          }
+        }, [sortedResult]);
+
+        const handleStart = (sortMode) => {
+          const data = sortMode === 'ALL' ? SONGS_ALL : SONGS_FILTERED;
+          setSelectedDataset(data);
+          startSort(data);
+          setMode('battle');
+        };
+
+        const copyToClipboard = () => {
+          if (!sortedResult) return;
+          const text = sortedResult.map((s, i) => `${i + 1}. ${s.title}`).join('\n');
+          navigator.clipboard.writeText(text).then(() => alert('클립보드에 복사되었습니다.'));
+        };
+
+        const saveImage = async () => {
+          if (resultRef.current && window.html2canvas) {
+            const canvas = await window.html2canvas(resultRef.current, {
+              backgroundColor: '#000000',
+              scale: 2
+            });
+            const link = document.createElement('a');
+            link.download = 'ateez-ranking.png';
+            link.href = canvas.toDataURL();
+            link.click();
+          } else {
+            alert('Image generation library not loaded yet.');
+          }
+        };
+
+        // --- RENDER: SETUP ---
+        if (mode === 'setup') {
+          return (
+            <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-black text-white">
+              <div className="max-w-md w-full text-center space-y-12">
+                <div className="space-y-4">
+                  <h1 className="text-3xl font-bold tracking-tighter">
+                    에이티즈 곡 취향 소트
+                  </h1>
+                  <div className="w-12 h-1 bg-white mx-auto"></div>
+                </div>
+
+                <div className="grid gap-4">
+                  <button 
+                    onClick={() => handleStart('ALL')}
+                    className="group cursor-pointer p-6 bg-transparent border border-white hover:bg-white hover:text-black transition-all duration-300"
+                  >
+                    <h3 className="text-xl font-bold mb-1">일본 곡 포함</h3>
+                    <span className="text-sm opacity-60 group-hover:opacity-100">
+                      {SONGS_ALL.length}곡
+                    </span>
+                  </button>
+
+                  <button 
+                    onClick={() => handleStart('KOR_ONLY')}
+                    className="group cursor-pointer p-6 bg-transparent border border-white hover:bg-white hover:text-black transition-all duration-300"
+                  >
+                    <h3 className="text-xl font-bold mb-1">한국 발매곡만</h3>
+                    <span className="text-sm opacity-60 group-hover:opacity-100">
+                      {SONGS_FILTERED.length}곡
+                    </span>
+                  </button>
+                </div>
+                
+                <footer className="text-zinc-600 text-xs mt-12">
+                  @dearmars403
+                </footer>
+              </div>
+            </div>
+          );
+        }
+
+        // --- RENDER: RESULT ---
+        if (mode === 'result' && sortedResult) {
+          return (
+            <div className="min-h-screen p-6 bg-black text-white flex flex-col items-center">
+              <div className="w-full max-w-2xl">
+                <div className="flex justify-end items-center mb-8 border-b border-zinc-800 pb-4">
+                  <div className="flex gap-2">
+                    <Button onClick={copyToClipboard} variant="secondary" className="!py-2 !px-4 text-xs">
+                      텍스트 복사
+                    </Button>
+                    <Button onClick={saveImage} variant="accent" className="!py-2 !px-4 text-xs">
+                      이미지 저장
+                    </Button>
+                  </div>
+                </div>
+
+                <div ref={resultRef} className="bg-black p-8 border border-zinc-800">
+                  <div className="text-center mb-10">
+                     <h1 className="text-2xl font-bold mb-2 uppercase tracking-wide">
+                      소트 결과
+                    </h1>
+                  </div>
+                  
+                  <div className="space-y-1">
+                    {sortedResult.map((song, idx) => (
+                      <div key={song.id} className="flex items-center p-3 border-b border-zinc-900 last:border-0 hover:bg-zinc-900/30 transition-colors">
+                        <span className={`
+                          w-6 h-6 flex items-center justify-center font-bold text-sm mr-4
+                          ${idx < 3 ? 'text-white' : 'text-zinc-600'}
+                        `}>
+                          {idx + 1}
+                        </span>
+                        <span className={`font-medium text-sm ${idx < 3 ? 'text-white' : 'text-zinc-300'}`}>
+                          {song.title}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // --- RENDER: BATTLE ---
+        return (
+          <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-black text-white">
+            <div className="w-full max-w-xl flex flex-col h-full justify-center">
+              <h2 className="text-center text-sm font-bold text-zinc-500 mb-10 tracking-normal uppercase">
+                더 좋아하는 곡을 선택하세요!
+              </h2>
+
+              {currentPair ? (
+                <div className="grid grid-cols-2 gap-4 mb-10">
+                  {/* Left Choice */}
+                  <div 
+                    onClick={() => handleVote('left')}
+                    className="aspect-square flex items-center justify-center p-4 border border-zinc-800 hover:border-white hover:bg-white hover:text-black cursor-pointer transition-all duration-200 group"
+                  >
+                    <span className="text-lg md:text-xl font-bold text-center leading-tight break-keep">
+                      {currentPair.left.title}
+                    </span>
+                  </div>
+
+                  {/* Right Choice */}
+                  <div 
+                    onClick={() => handleVote('right')}
+                    className="aspect-square flex items-center justify-center p-4 border border-zinc-800 hover:border-white hover:bg-white hover:text-black cursor-pointer transition-all duration-200 group"
+                  >
+                    <span className="text-lg md:text-xl font-bold text-center leading-tight break-keep">
+                      {currentPair.right.title}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="h-64 flex items-center justify-center">
+                  <span className="text-zinc-500 text-sm animate-pulse">다음 대결 준비 중...</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <Button onClick={() => handleVote('tie')} variant="secondary" className="text-xs">
+                  둘 다 좋아요
+                </Button>
+                <Button onClick={() => handleVote('tie')} variant="secondary" className="text-xs opacity-60 hover:opacity-100">
+                  모르겠어요
+                </Button>
+              </div>
+
+              <ProgressBar progress={progress} />
+
+              <div className="flex justify-center mt-6 h-10">
+                {canUndo && (
+                  <button 
+                    onClick={handleUndo}
+                    className="flex items-center text-zinc-600 hover:text-white text-xs transition-colors px-4 py-2"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                    </svg>
+                    이전 단계
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      // ----------------------------------------------------------------------
+      // 7. Mounting
+      // ----------------------------------------------------------------------
+      const rootElement = document.getElementById('root');
+      if (rootElement) {
+        const root = ReactDOM.createRoot(rootElement);
+        root.render(<App />);
+      }
+    </script>
+  </body>
+</html>
