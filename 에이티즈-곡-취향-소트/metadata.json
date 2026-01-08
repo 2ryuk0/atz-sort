@@ -1,0 +1,5 @@
+{
+  "name": "에이티즈 곡 취향 소트",
+  "description": "에이티즈 디스코그래피 취향 분석기. 병합 정렬 알고리즘을 사용해 나만의 순위를 만들어보세요.",
+  "requestFramePermissions": []
+}
