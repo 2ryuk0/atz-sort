@@ -35,9 +35,9 @@
   <script type="importmap">
 {
   "imports": {
-    "react/": "https://esm.sh/react@^19.2.3/",
     "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/"
   }
 }
 </script>
@@ -296,17 +296,19 @@ Sagittarius (우영)
 Choose
 `;
 
+      // Helper to parse string to Song objects
       const parseSongs = (text) => {
         return text
           .trim()
           .split('\n')
           .map((line) => line.trim())
-          .filter((line) => line.length > 0 && line !== 'Choose')
+          // Filter out empty lines
+          .filter((line) => line.length > 0)
           .map((line, index) => ({ id: index, title: line }));
       };
 
       const SONGS_ALL = parseSongs(RAW_DATA_ALL_TEXT);
-      const SONGS_FILTERED = parseSongs(RAW_DATA_KOR_TEXT);
+      const SONGS_KOR_ONLY = parseSongs(RAW_DATA_KOR_TEXT);
 
       // ----------------------------------------------------------------------
       // 3. Components: Button
@@ -561,7 +563,7 @@ Choose
         }, [sortedResult]);
 
         const handleStart = (sortMode) => {
-          const data = sortMode === 'ALL' ? SONGS_ALL : SONGS_FILTERED;
+          const data = sortMode === 'ALL' ? SONGS_ALL : SONGS_KOR_ONLY;
           setSelectedDataset(data);
           startSort(data);
           setMode('battle');
@@ -617,7 +619,7 @@ Choose
                   >
                     <h3 className="text-xl font-bold mb-1">한국 발매곡만</h3>
                     <span className="text-sm opacity-60 group-hover:opacity-100">
-                      {SONGS_FILTERED.length}곡
+                      {SONGS_KOR_ONLY.length}곡
                     </span>
                   </button>
                 </div>
